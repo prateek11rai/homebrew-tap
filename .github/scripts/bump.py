@@ -10,6 +10,7 @@ Supports:
    - Checks every package defined in packages.json
    - Probes vendor CDN via HTTP HEAD for patch/minor/major increments
    - Skips packages with no updates and continues to the rest
+   - Handles multi-platform artifacts (macOS and Linux, ARM64 and x86_64)
 """
 
 import argparse
@@ -58,10 +59,14 @@ def calculate_sha256(url: str) -> str:
 def update_formula(
     formula_path: Path,
     new_version: str,
-    arm64_url: str,
-    arm64_sha: str,
-    intel_url: str,
-    intel_sha: str,
+    darwin_arm_url: str,
+    darwin_arm_sha: str,
+    darwin_intel_url: str,
+    darwin_intel_sha: str,
+    linux_arm_url: str = "",
+    linux_arm_sha: str = "",
+    linux_intel_url: str = "",
+    linux_intel_sha: str = "",
 ) -> bool:
     """Update version, URLs, and checksums in a formula Ruby file."""
     content = formula_path.read_text(encoding="utf-8")
@@ -74,17 +79,32 @@ def update_formula(
         count=1,
     )
 
-    arm_pattern = re.compile(
-        r'(on_arm\s+do\s*\n\s*url\s+")[^"]+("\s*\n\s*sha256\s+")[^"]+(")',
-        re.MULTILINE,
-    )
-    content = arm_pattern.sub(rf"\g<1>{arm64_url}\g<2>{arm64_sha}\g<3>", content)
+    # Replace on_macos block
+    macos_block = f"""  on_macos do
+    on_arm do
+      url "{darwin_arm_url}"
+      sha256 "{darwin_arm_sha}"
+    end
+    on_intel do
+      url "{darwin_intel_url}"
+      sha256 "{darwin_intel_sha}"
+    end
+  end"""
+    content = re.sub(r"  on_macos do\n.*?\n  end", macos_block, content, flags=re.DOTALL)
 
-    intel_pattern = re.compile(
-        r'(on_intel\s+do\s*\n\s*url\s+")[^"]+("\s*\n\s*sha256\s+")[^"]+(")',
-        re.MULTILINE,
-    )
-    content = intel_pattern.sub(rf"\g<1>{intel_url}\g<2>{intel_sha}\g<3>", content)
+    # Replace on_linux block if provided
+    if linux_arm_url and linux_intel_url:
+        linux_block = f"""  on_linux do
+    on_arm do
+      url "{linux_arm_url}"
+      sha256 "{linux_arm_sha}"
+    end
+    on_intel do
+      url "{linux_intel_url}"
+      sha256 "{linux_intel_sha}"
+    end
+  end"""
+        content = re.sub(r"  on_linux do\n.*?\n  end", linux_block, content, flags=re.DOTALL)
 
     if content != original:
         formula_path.write_text(content, encoding="utf-8")
@@ -98,16 +118,34 @@ def create_versioned_formula(
     pkg_name: str,
     minor_tag: str,
     new_version: str,
-    arm64_url: str,
-    arm64_sha: str,
-    intel_url: str,
-    intel_sha: str,
+    darwin_arm_url: str,
+    darwin_arm_sha: str,
+    darwin_intel_url: str,
+    darwin_intel_sha: str,
+    linux_arm_url: str = "",
+    linux_arm_sha: str = "",
+    linux_intel_url: str = "",
+    linux_intel_sha: str = "",
 ) -> Path:
     """Create a new versioned formula file (e.g. antigravity-acp@1.5.rb) with keg_only."""
     versioned_file = base_formula.parent / f"{pkg_name}@{minor_tag}.rb"
     class_suffix = minor_tag.replace(".", "")
     pascal_name = "".join(part.capitalize() for part in pkg_name.split("-"))
     class_name = f"{pascal_name}AT{class_suffix}"
+
+    linux_section = ""
+    if linux_arm_url and linux_intel_url:
+        linux_section = f"""
+  on_linux do
+    on_arm do
+      url "{linux_arm_url}"
+      sha256 "{linux_arm_sha}"
+    end
+    on_intel do
+      url "{linux_intel_url}"
+      sha256 "{linux_intel_sha}"
+    end
+  end"""
 
     code = f"""class {class_name} < Formula
   desc "{pkg_name} ({minor_tag} branch)"
@@ -118,14 +156,14 @@ def create_versioned_formula(
 
   on_macos do
     on_arm do
-      url "{arm64_url}"
-      sha256 "{arm64_sha}"
+      url "{darwin_arm_url}"
+      sha256 "{darwin_arm_sha}"
     end
     on_intel do
-      url "{intel_url}"
-      sha256 "{intel_sha}"
+      url "{darwin_intel_url}"
+      sha256 "{darwin_intel_sha}"
     end
-  end
+  end{linux_section}
 
   def install
     bin.install "agy_acp_server.par"
@@ -157,17 +195,20 @@ def probe_latest_version(pkg_meta: dict) -> str | None:
         return None
 
     major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
-    arm_template = pkg_meta.get("artifacts", {}).get("arm64", {}).get("url_template", "")
-    if not arm_template:
+    probe_template = pkg_meta.get("version_check", {}).get("url_template", "")
+    if not probe_template:
+        probe_template = pkg_meta.get("artifacts", {}).get("darwin_arm64", {}).get("url_template", "")
+
+    if not probe_template:
         return None
 
     latest_found = None
 
     # 1. Probe patch increments (e.g. 1.4.2, 1.4.3...)
     p = patch + 1
-    while p <= patch + 10:  # Probe up to 10 patches ahead
+    while p <= patch + 10:
         candidate = f"{major}.{minor}.{p}"
-        url = arm_template.replace("{version}", candidate)
+        url = probe_template.replace("{version}", candidate)
         if check_url_exists(url):
             latest_found = candidate
             p += 1
@@ -178,7 +219,7 @@ def probe_latest_version(pkg_meta: dict) -> str | None:
     mi = minor + 1
     while mi <= minor + 5:
         candidate = f"{major}.{mi}.0"
-        url = arm_template.replace("{version}", candidate)
+        url = probe_template.replace("{version}", candidate)
         if check_url_exists(url):
             latest_found = candidate
             mi += 1
@@ -187,7 +228,7 @@ def probe_latest_version(pkg_meta: dict) -> str | None:
 
     # 3. Probe major increment (e.g. 2.0.0)
     candidate_major = f"{major + 1}.0.0"
-    url_major = arm_template.replace("{version}", candidate_major)
+    url_major = probe_template.replace("{version}", candidate_major)
     if check_url_exists(url_major):
         latest_found = candidate_major
 
@@ -207,18 +248,24 @@ def bump_package(pkg_meta: dict, new_version: str, formula_path_override: str = 
         return False
 
     artifacts = pkg_meta.get("artifacts", {})
-    arm64_template = artifacts.get("arm64", {}).get("url_template", "")
-    intel_template = artifacts.get("x86_64", {}).get("url_template", "")
+    darwin_arm_tmpl = artifacts.get("darwin_arm64", {}).get("url_template", "")
+    darwin_intel_tmpl = artifacts.get("darwin_x86_64", {}).get("url_template", "")
+    linux_arm_tmpl = artifacts.get("linux_arm64", {}).get("url_template", "")
+    linux_intel_tmpl = artifacts.get("linux_x86_64", {}).get("url_template", "")
 
-    arm64_url = arm64_template.replace("{version}", new_version)
-    intel_url = intel_template.replace("{version}", new_version)
+    darwin_arm_url = darwin_arm_tmpl.replace("{version}", new_version)
+    darwin_intel_url = darwin_intel_tmpl.replace("{version}", new_version)
+    linux_arm_url = linux_arm_tmpl.replace("{version}", new_version) if linux_arm_tmpl else ""
+    linux_intel_url = linux_intel_tmpl.replace("{version}", new_version) if linux_intel_tmpl else ""
 
     print(f"\n==========================================")
     print(f"Bumping '{pkg_name}' to version {new_version}...")
     print(f"==========================================")
     try:
-        arm64_sha = calculate_sha256(arm64_url)
-        intel_sha = calculate_sha256(intel_url)
+        darwin_arm_sha = calculate_sha256(darwin_arm_url)
+        darwin_intel_sha = calculate_sha256(darwin_intel_url)
+        linux_arm_sha = calculate_sha256(linux_arm_url) if linux_arm_url else ""
+        linux_intel_sha = calculate_sha256(linux_intel_url) if linux_intel_url else ""
     except Exception as e:
         print(f"Error calculating artifact checksums for {pkg_name}: {e}")
         return False
@@ -226,27 +273,46 @@ def bump_package(pkg_meta: dict, new_version: str, formula_path_override: str = 
     updated = update_formula(
         target_formula,
         new_version,
-        arm64_url,
-        arm64_sha,
-        intel_url,
-        intel_sha,
+        darwin_arm_url,
+        darwin_arm_sha,
+        darwin_intel_url,
+        darwin_intel_sha,
+        linux_arm_url,
+        linux_arm_sha,
+        linux_intel_url,
+        linux_intel_sha,
     )
 
     target_minor = extract_minor(new_version)
     if is_main_formula and target_minor:
         minor_formula = target_formula.parent / f"{pkg_name}@{target_minor}.rb"
         if minor_formula.is_file():
-            update_formula(minor_formula, new_version, arm64_url, arm64_sha, intel_url, intel_sha)
+            update_formula(
+                minor_formula,
+                new_version,
+                darwin_arm_url,
+                darwin_arm_sha,
+                darwin_intel_url,
+                darwin_intel_sha,
+                linux_arm_url,
+                linux_arm_sha,
+                linux_intel_url,
+                linux_intel_sha,
+            )
         else:
             create_versioned_formula(
                 target_formula,
                 pkg_name,
                 target_minor,
                 new_version,
-                arm64_url,
-                arm64_sha,
-                intel_url,
-                intel_sha,
+                darwin_arm_url,
+                darwin_arm_sha,
+                darwin_intel_url,
+                darwin_intel_sha,
+                linux_arm_url,
+                linux_arm_sha,
+                linux_intel_url,
+                linux_intel_sha,
             )
 
     if updated and is_main_formula:
@@ -310,7 +376,6 @@ def main():
                 f.write("\n")
             print("✓ Synchronized packages.json")
 
-    # Output for GitHub Actions
     output_file = os.getenv("GITHUB_OUTPUT")
     if output_file:
         with open(output_file, "a", encoding="utf-8") as f:

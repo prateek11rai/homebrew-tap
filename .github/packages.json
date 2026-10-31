@@ -11,11 +11,17 @@
         "url_template": "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-{version}-darwin-arm64.zip"
       },
       "artifacts": {
-        "arm64": {
+        "darwin_arm64": {
           "url_template": "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-{version}-darwin-arm64.zip"
         },
-        "x86_64": {
+        "darwin_x86_64": {
           "url_template": "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-{version}-darwin-x86_64.zip"
+        },
+        "linux_arm64": {
+          "url_template": "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-{version}-linux-arm64.zip"
+        },
+        "linux_x86_64": {
+          "url_template": "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-{version}-linux-x86_64.zip"
         }
       }
     }

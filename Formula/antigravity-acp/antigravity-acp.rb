@@ -14,6 +14,17 @@ class AntigravityAcp < Formula
     end
   end
 
+  on_linux do
+    on_arm do
+      url "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.4.1-linux-arm64.zip"
+      sha256 "609336a1c97545487e3ddd55dbd153dc0f40f4e6534486cc1c5f4c0ebb85c2da"
+    end
+    on_intel do
+      url "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.4.1-linux-x86_64.zip"
+      sha256 "2e37012ceb2a5c7fc7309b6e6596234fb637ee3c62a5199f65d4cbe777871384"
+    end
+  end
+
   def install
     bin.install "agy_acp_server.par"
     bin.install "localharness_external"
