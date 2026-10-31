@@ -34,9 +34,11 @@ brew install prateek11rai/<formula>
 
 ### Formulae
 
-| Formula | Description | Version | Documentation |
-| :--- | :--- | :--- | :--- |
-| **`antigravity-acp`** | Antigravity Agent Client Protocol (ACP) server daemon for IDEs & editors | `1.4.1` | [Documentation](docs/formulae/antigravity-acp.md) |
+| Formula | Description | Documentation |
+| :--- | :--- | :--- |
+| **`antigravity-acp`** | Google Antigravity Agent Client Protocol (ACP) server daemon | [Documentation](docs/formulae/antigravity-acp.md) |
+
+*(Version-pinned streams like `<formula>@<version>` are available for supported packages; see individual package documentation).*
 
 ### Casks
 
@@ -52,7 +54,7 @@ To declare packages from this tap in your machine's `Brewfile`:
 # Tap declaration
 tap "prateek11rai/tap"
 
-# Formulae
+# Formula
 brew "antigravity-acp"
 ```
 
@@ -61,6 +63,18 @@ Apply changes on any machine with:
 ```bash
 brew bundle
 ```
+
+---
+
+## Automated Version Bumping
+
+This repository uses a generic version bumper and CI testing workflow ([`.github/workflows/bump-formula.yml`](.github/workflows/bump-formula.yml)) powered by [`.github/packages.json`](.github/packages.json).
+
+When triggered:
+1. Vendor artifacts are downloaded and their SHA-256 checksums are calculated.
+2. The formula code files (`Formula/.../*.rb`) and package registry are updated.
+3. Strict Homebrew checks (`brew audit`, `brew install --build-from-source`, and `brew test`) run on macOS runners.
+4. Verified changes are automatically committed directly to `main`. Documentation remains evergreen and untouched.
 
 ---
 

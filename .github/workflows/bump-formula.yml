@@ -1,0 +1,87 @@
+name: Bump Formula Version & Test
+
+on:
+  schedule:
+    # Runs every Monday at 06:00 UTC (11:30 AM IST)
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to bump (or "auto" for multi-package discovery)'
+        required: false
+        default: 'auto'
+      version:
+        description: 'Specific version to bump to (leave empty for auto-discovery)'
+        required: false
+        default: ''
+      formula_path:
+        description: 'Target formula file override (optional)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  bump-and-test:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run version bumper
+        id: bumper
+        run: |
+          if [ "${{ inputs.package }}" = "auto" ] || [ -z "${{ inputs.package }}" ]; then
+            python3 .github/scripts/bump.py --auto
+          elif [ -n "${{ inputs.version }}" ]; then
+            python3 .github/scripts/bump.py \
+              --package "${{ inputs.package }}" \
+              --version "${{ inputs.version }}" \
+              --formula-path "${{ inputs.formula_path }}"
+          else
+            python3 .github/scripts/bump.py --package "${{ inputs.package }}"
+          fi
+
+      - name: Audit, Build and Test Updated Formulas
+        if: steps.bumper.outputs.updated == 'true'
+        run: |
+          # Identify all modified or created formula .rb files
+          UPDATED_FORMULAS=$(git status --porcelain | grep -E 'Formula/.*\.rb$' | awk '{print $2}')
+          
+          if [ -z "$UPDATED_FORMULAS" ]; then
+            echo "No formula files modified. Exiting cleanly."
+            exit 0
+          fi
+
+          for FORMULA in $UPDATED_FORMULAS; do
+            echo "=========================================================="
+            echo "==> Auditing $FORMULA with Homebrew..."
+            echo "=========================================================="
+            brew audit --strict "$FORMULA"
+
+            echo "==> Testing build from source for $FORMULA..."
+            brew install --build-from-source "$FORMULA"
+
+            echo "==> Running test suite for $FORMULA..."
+            brew test "$FORMULA"
+
+            echo "==> Cleaning up $FORMULA..."
+            brew uninstall "$FORMULA"
+          done
+
+      - name: Commit and push changes
+        if: steps.bumper.outputs.updated == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "chore(formulae): automated weekly version bump"
+          git push origin main

@@ -4,123 +4,147 @@ System instructions and conventions for AI agents and maintainers working in thi
 
 ---
 
-## 1. Repository Purpose
+## 1. Repository Purpose & Scope
 
-This repository is a personal GitHub-hosted **Homebrew Tap** (`prateek11rai/tap`).  
+This repository is a personal, public GitHub-hosted **Homebrew Tap** (`prateek11rai/tap`).  
 Its primary purpose is to package, distribute, and maintain custom formulae, casks, and standalone binary releases that:
 1. Lack official upstream packaging in `homebrew/core` or `homebrew/cask`.
 2. Require direct binary downloads from vendor CDNs while preserving system integrity (checksum validation, automated PATH management, clean uninstalls).
-3. Support local developer environments and workflows (such as T3 Code, agent runtimes, and developer tooling).
+3. Support local developer environments and workflows across agent runtimes and modern developer tooling.
 
 ---
 
 ## 2. Directory Layout & Architecture
 
-Agents must adhere strictly to Homebrew's canonical directory structure:
+Agents must adhere strictly to Homebrew's directory structure:
 
 ```text
 homebrew-tap/
 ├── .agents/
 │   └── AGENTS.md                    # Agent instructions and repository conventions (this file)
 ├── .github/
-│   └── workflows/                   # Future GitHub Actions (CI / brew test-bot / linting)
+│   ├── packages.json                # Package registry & artifact template metadata
+│   ├── scripts/
+│   │   └── bump.py                  # Generic Python script for SHA-256 calculation & formula updating
+│   └── workflows/
+│       └── bump-formula.yml         # GitHub Actions workflow: audit, build, test & direct push to main
+├── assets/                          # Repository visuals (banner.svg, brew-logo.svg)
 ├── Formula/                         # Command-line tools, headless daemons, and standalone binaries
-│   └── <formula-name>.rb
+│   └── <package-name>/              # Grouped package folder
+│       ├── <package-name>.rb        # Default / latest stable formula (symlinked to bin)
+│       └── <package-name>@<ver>.rb  # Pinned minor versioned formula (marked keg_only)
 ├── Casks/                           # GUI macOS applications (.app bundles, DMGs, PKGs)
 │   └── <cask-name>.rb               # (Reserved for future casks)
 ├── docs/                            # In-depth package documentation
 │   ├── formulae/
-│   │   └── <formula-name>.md        # Technical doc, upstream URLs, checksums, and client setup
+│   │   └── <package-name>.md        # Architecture, upstream CDN patterns, verification, client setup
 │   └── casks/
 │       └── <cask-name>.md           # (Reserved for future cask docs)
 ├── .gitignore                       # Standard Homebrew tap ignores
 └── README.md                        # Lean public entrypoint: tap instructions, package list, dotfiles setup
 ```
 
-### Rules on Directory Placement:
-* **`Formula/`**: Put Ruby formula files (`.rb`) here. **Do not** put markdown or other asset files inside `Formula/`, as Homebrew's tap loader scans all files in this directory.
-* **`Casks/`**: Put GUI app definitions (`.rb`) here.
-* **`docs/formulae/` & `docs/casks/`**: All detailed package descriptions, upstream sources, checksum tables, and client integration guides go here.
-* **`README.md`**: Must remain lean and generic. It lists packages in a high-level table and links to the relevant document under `docs/`.
-
 ---
 
-## 3. Workflow: Adding a New Package
+## 3. Evergreen Documentation Standard (Zero Documentation Maintenance on Bumps)
 
-When tasked with adding a new package, agents must follow this sequential protocol:
+To maintain simplicity, eliminate documentation staleness, and prevent fragile regex automation:
 
-### Step 1: Classification (Formula vs. Cask)
-* Use a **Formula** (`Formula/<name>.rb`) for:
-  - Command-line interfaces (CLIs).
-  - Headless daemons or protocol servers (e.g. `antigravity-acp`).
-  - Pre-compiled binaries requiring symlinks into `/opt/homebrew/bin`.
-* Use a **Cask** (`Casks/<name>.rb`) for:
-  - macOS `.app` bundles placed in `/Applications`.
-  - Packages distributed as `.dmg`, `.pkg`, or `.zip` containing a GUI application.
-
-### Step 2: Source Integrity & Multi-Architecture Support
-* Always compute and verify official SHA256 checksums from the vendor's release artifacts. Never omit checksums.
-* Support both Apple Silicon (`arm64`) and Intel (`x86_64`) whenever upstream binaries exist:
-  ```ruby
-  on_macos do
-    on_arm do
-      url "https://vendor.example/release-arm64.zip"
-      sha256 "<checksum-arm64>"
-    end
-    on_intel do
-      url "https://vendor.example/release-x86_64.zip"
-      sha256 "<checksum-intel>"
-    end
-  end
-  ```
-
-### Step 3: Local Validation Commands
-Before presenting or committing any formula changes, run:
-1. **Ruby Syntax Validation:**
+1. **Only Primary Packages in `README.md`:**  
+   The `README.md` package table only indexes the **main package identifier** (e.g. `antigravity-acp`). It does **not** list individual version variants (`@1.4`, `@1.5`).
+2. **Generic Formula Documentation:**  
+   Individual package docs in `docs/formulae/<package>.md` document the tool's architecture, upstream CDN patterns, installation commands, and client integration. They do not hardcode transient patch versions or version tables.
+3. **No Markdown Updates During Version Bumps:**  
+   The automated version bump script (`bump.py`) and workflow (`bump-formula.yml`) **never edit markdown files**. They strictly modify:
+   * The formula Ruby code files (`Formula/<package>/*.rb`)
+   * The metadata manifest (`.github/packages.json`)
+4. **Inspecting Live Versions:**  
+   Users inspect current installed and available versions using standard Homebrew commands:
    ```bash
-   ruby -c Formula/<name>.rb
-   ```
-2. **Formula Audit (Homebrew DSL compliance):**
-   ```bash
-   brew audit --strict Formula/<name>.rb
-   ```
-3. **Local Dry-Run Installation & Test:**
-   ```bash
-   brew install --build-from-source Formula/<name>.rb
-   brew test Formula/<name>.rb
+   brew info prateek11rai/<formula>
    ```
 
-### Step 4: Documentation Protocol
-Every new formula or cask **must** have:
-1. A corresponding documentation file: `docs/formulae/<name>.md` or `docs/casks/<name>.md`.
-2. An entry added to the package index table in `README.md`.
+---
+
+## 4. Formula Organization & Versioning Standards
+
+### Grouping in `Formula/<package-name>/`
+Formulas are organized into package subdirectories under `Formula/`. Homebrew scans `Formula/**/*.rb` recursively.
+
+### Default vs. Versioned Formulas
+* **Default formula (`Formula/<package>/<package>.rb`):**  
+  * Tracks the newest stable release.  
+  * Class name: standard CamelCase (e.g. `class AntigravityAcp < Formula`).  
+  * Symlinked into `/opt/homebrew/bin/`.
+* **Versioned formula (`Formula/<package>/<package>@<ver>.rb`):**  
+  * Pinned to a major or minor branch (e.g. `@1.4`).  
+  * Class name: Homebrew converts `@` to `AT` (e.g. `class AntigravityAcpAT14 < Formula`).  
+  * **Must include `keg_only :versioned_formula`** to prevent binary filename collisions.
+
+### Minor Version Lifecycle:
+* **Patch releases (e.g. `1.4.1` → `1.4.2`):** Updates the active minor branch (`@1.4`) in place alongside the default formula.
+* **New Minor releases (e.g. `1.5.0`):** The previous minor branch (`@1.4`) is preserved permanently in the repo. A new formula (`@1.5`) is generated automatically, and the default formula is bumped to the new version.
 
 ---
 
-## 4. Git Commit & Versioning Conventions
+## 5. Automated Version Bumping & Testing Workflow
 
-Homebrew repository conventions dictate clean, predictable commit messages:
+This repo includes a fully automated version bumper framework:
 
-| Action | Commit Format | Example |
-| :--- | :--- | :--- |
-| **New Formula** | `<formula>: add formula` | `antigravity-acp: add formula` |
-| **New Cask** | `<cask>: add cask` | `my-app: add cask` |
-| **Version Bump** | `<formula> <new_version>` | `antigravity-acp 1.4.2` |
-| **Fix/Update** | `<formula>: <summary of change>` | `antigravity-acp: update download URLs` |
-| **Docs Update** | `docs: <summary>` | `docs: update T3 Code setup instructions` |
+### Registry: `.github/packages.json`
+Every package managed by the bumper has an entry defining its artifact URL templates:
+```json
+{
+  "name": "antigravity-acp",
+  "formula_path": "Formula/antigravity-acp/antigravity-acp.rb",
+  "current_version": "1.4.1",
+  "artifacts": {
+    "arm64": { "url_template": "...{version}..." },
+    "x86_64": { "url_template": "...{version}..." }
+  }
+}
+```
+
+### Script: `.github/scripts/bump.py`
+* Downloads the vendor archives for `arm64` and `x86_64`.
+* Computes official `sha256` checksums.
+* Updates the target `.rb` formula with the new version, URLs, and checksums.
+* Auto-creates new `@minor` branches if a new minor release is detected.
+* Updates `current_version` in `.github/packages.json`.
+
+### GitHub Actions: `.github/workflows/bump-formula.yml`
+Runs on a macOS GitHub Actions runner:
+1. Executes `.github/scripts/bump.py` with given inputs.
+2. Validates strict Homebrew standards and runs test suites:
+   ```bash
+   brew audit --strict "$FORMULA_PATH"
+   brew install --build-from-source "$FORMULA_PATH"
+   brew test "$FORMULA_PATH"
+   brew uninstall "$FORMULA_PATH"
+   ```
+3. **Direct Push to `main`:** If and only if all tests pass, the action auto-commits with `<package>: update to <version>` and pushes directly to `main` using GitHub Actions bot credentials.
 
 ---
 
-## 5. Future Extensions & Automation
+## 6. Confidentiality & Public Repository Boundary
 
-* **GitHub Actions (`.github/workflows/tests.yml`):**  
-  In the future, this repository can be wired to Homebrew's official CI runner (`Homebrew/actions/setup-homebrew` and `brew test-bot`) to automatically audit and test pull requests on both macOS ARM and Intel runners.
-* **Dependabot / Version Bumpers:**  
-  Periodic GitHub Actions can be added to poll vendor CDN endpoints or GitHub release feeds and submit automated version bump PRs.
+> [!IMPORTANT]
+> This is a **public open-source repository**.  
+> **Never include internal company project names, proprietary tool references, internal hostnames, or private credentials** in public documentation, commit messages, or formulas.  
+> Always use generic, standard terminology such as:
+> * *"ACP client editors and developer tools"*
+> * *"External agent runtimes and orchestrators"*
+> * *"Language and agent server protocol daemons"*
 
 ---
 
-## 6. Safety & Human Review
+## 7. Protocol for Adding a New Package
 
-* **Never commit or push directly without explicit user consent.** Prepare changes as untracked files or working tree changes and present them for review.
-* Ensure all external download URLs originate strictly from verified vendor domains.
+When adding a new package to the tap:
+1. Create `Formula/<package-name>/<package-name>.rb`.
+2. Add the package definition to `.github/packages.json`.
+3. Add the package name to `.github/workflows/bump-formula.yml` input dropdown.
+4. Verify local syntax: `ruby -c Formula/<package-name>/<package-name>.rb`.
+5. Create `docs/formulae/<package-name>.md` (without hardcoding version numbers).
+6. Add single package row to the index table in `README.md`.
+7. Verify with `brew audit --strict Formula/<package-name>/<package-name>.rb`.

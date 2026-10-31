@@ -8,67 +8,90 @@ Google Antigravity Agent Client Protocol (ACP) headless server daemon and local 
 
 ## Overview
 
-* **Formula file:** [`Formula/antigravity-acp.rb`](../../Formula/antigravity-acp.rb)
+* **Formula Directory:** [`Formula/antigravity-acp/`](../../Formula/antigravity-acp/)
 * **Upstream Homepage:** [https://antigravity.google](https://antigravity.google)
-* **Latest Version:** `1.4.1`
 
-This package distributes the standalone headless ACP server (`agy_acp_server.par`) and companion sandbox execution harness (`localharness_external`) used by agent-aware developer editors such as **T3 Code**, **Zed**, and **VS Code**.
+This package distributes the standalone headless ACP server (`agy_acp_server.par`) and companion sandbox execution harness (`localharness_external`) used by agent-aware developer editors and external orchestrators communicating via Google's Agent Client Protocol.
+
+---
+
+## Release Streams
+
+This package is provided in two installation forms:
+
+1. **Latest Stable (`antigravity-acp`):**  
+   Tracks the newest stable release published by Google. Binaries are symlinked into `/opt/homebrew/bin/` and automatically available in your `$PATH`.
+2. **Pinned Version Streams (`antigravity-acp@<version>`):**  
+   Pinned to specific major/minor release branches. Installed as `keg_only` in `/opt/homebrew/opt/antigravity-acp@<version>/` so they never collide with the default binary.
 
 ---
 
 ## Why This Formula Exists
 
-1. **Missing Upstream Formula:** Google distributes the interactive terminal CLI (`antigravity-cli` / `agy`) and GUI app (`antigravity`) on Homebrew, but does not provide an official formula for the standalone ACP protocol daemon.
-2. **T3 Code Integration:** T3 Code communicates strictly over the Agent Client Protocol. It scans `$PATH` for two binaries located in the same directory:
+1. **Decoupled Extension Runtime:** Google distributes the interactive terminal CLI (`antigravity-cli` / `agy`) and desktop IDE (`antigravity`) on Homebrew, but does not provide an official formula for the standalone headless ACP daemon.
+2. **Standardized ACP Interface:** External editors and agent runtimes connect via ACP stdio/IPC and require two companion binaries in the same directory:
    * `agy_acp_server.par`
    * `localharness_external`
-3. **Controlled Local Installation:** This formula allows Homebrew to manage binary downloading, checksum integrity verification, and symlinking into `/opt/homebrew/bin` without relying on ad-hoc manual scripts or opaque in-app background downloaders.
+3. **Reproducible Local Management:** This formula allows Homebrew to manage binary downloads, checksum integrity validation, and symlinks in `/opt/homebrew/bin` without manual intervention or opaque in-app background downloaders.
 
 ---
 
-## Upstream Release Sources
+## Upstream Release Architecture
 
-Google distributes the ACP extension runtime directly from its release CDN:
+Google distributes the ACP extension runtime as platform-specific archives directly from its release CDN:
 
-| Platform | Architecture | Archive URL | SHA256 Checksum |
-| :--- | :--- | :--- | :--- |
-| macOS | Apple Silicon (`arm64`) | `https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.4.1-darwin-arm64.zip` | `f9bdd68291ae78c38d2141e63bc86b84e6cc7b9f60f71652c68435a7943deb17` |
-| macOS | Intel (`x86_64`) | `https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.4.1-darwin-x86_64.zip` | `27e31f096874704f14167b07ef9e84cc77134615ee41d024f7b1c957add85307` |
+| Platform | Architecture | Archive Pattern |
+| :--- | :--- | :--- |
+| macOS | Apple Silicon (`arm64`) | `https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-{version}-darwin-arm64.zip` |
+| macOS | Intel (`x86_64`) | `https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-{version}-darwin-x86_64.zip` |
+
+Exact versions and validated SHA-256 checksums are maintained directly in the formula source files. To inspect the current version:
+
+```bash
+brew info prateek11rai/antigravity-acp
+```
 
 ---
 
 ## Installed Binaries
 
-When installed, the formula links the following binaries into your Homebrew `bin` path (`/opt/homebrew/bin`):
+When installed, the formula provides the following binaries:
 
 * **`agy_acp_server.par`**: Google's hermetic Python archive executable running the ACP server daemon.
-* **`localharness_external`**: Companion local harness runtime mediating process permissions and tool execution.
+* **`localharness_external`**: Companion local harness runtime mediating tool execution and host permissions.
 
 ---
 
-## Installation & Verification
+## Installation & Usage
 
-### Install
+### Install Latest Stable
 
 ```bash
 brew install prateek11rai/antigravity-acp
 ```
 
-### Verify
+### Install a Specific Pinned Branch
 
-Confirm both binaries are executable and resolvable in `$PATH`:
+```bash
+brew install prateek11rai/antigravity-acp@<version>
+```
+
+### Verification
+
+Confirm the binaries are installed and executable:
 
 ```bash
 which agy_acp_server.par
 which localharness_external
 ```
 
-### T3 Code Setup
+### ACP Client Integration
 
-1. Open **T3 Code**.
-2. Navigate to **Settings > Providers > Antigravity-Atlan**.
-3. T3 Code will automatically detect `agy_acp_server.par` from `$PATH` and mark the provider status as active.
-4. If running a custom path, specify `/opt/homebrew/bin/agy_acp_server.par` in the **Binary path** field.
+* **Standard Detection:** Most ACP-compatible editors search your system `$PATH` and will automatically discover `/opt/homebrew/bin/agy_acp_server.par`.
+* **Custom Executable Path:** If an editor or client asks for an explicit executable path, or if you are using a pinned branch formula (`antigravity-acp@<version>`), provide the exact binary path:
+  ```text
+  /opt/homebrew/opt/antigravity-acp@<version>/bin/agy_acp_server.par
+  ```
 
 ---
 
@@ -76,4 +99,3 @@ which localharness_external
 
 * [Google Antigravity Documentation](https://antigravity.google)
 * [Agent Client Protocol Specification (ACP)](https://github.com/google/agent-client-protocol)
-* [T3 Code](https://t3.chat)

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "packages": [
+    {
+      "name": "antigravity-acp",
+      "description": "Google Antigravity Agent Client Protocol (ACP) server daemon",
+      "formula_path": "Formula/antigravity-acp/antigravity-acp.rb",
+      "current_version": "1.4.1",
+      "version_check": {
+        "type": "cdn_url_probe",
+        "url_template": "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-{version}-darwin-arm64.zip"
+      },
+      "artifacts": {
+        "arm64": {
+          "url_template": "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-{version}-darwin-arm64.zip"
+        },
+        "x86_64": {
+          "url_template": "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-{version}-darwin-x86_64.zip"
+        }
+      }
+    }
+  ]
+}
