@@ -1,3 +1,5 @@
+<img src="../../assets/brew-logo.svg" align="right" width="72" alt="Homebrew Logo">
+
 # `antigravity-acp`
 
 Google Antigravity Agent Client Protocol (ACP) headless server daemon and local execution harness.
